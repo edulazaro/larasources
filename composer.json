@@ -1,0 +1,45 @@
+{
+    "name": "edulazaro/larasources",
+    "description": "Integrate external data sources into Laravel models with caching, retry and rate-limiting. Sources are model-like classes; Origins are pluggable API clients.",
+    "keywords": ["laravel", "eloquent", "external-api", "integration", "caching", "rate-limiting", "data-sources"],
+    "license": "MIT",
+    "type": "library",
+    "require": {
+        "php": ">=8.4",
+        "illuminate/support": ">=9.0",
+        "illuminate/database": ">=9.0",
+        "illuminate/http": ">=9.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "EduLazaro\\Larasources\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "EduLazaro\\Larasources\\Tests\\": "tests/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Edu Lazaro",
+            "email": "edu@edulazaro.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [
+                "EduLazaro\\Larasources\\LarasourcesServiceProvider"
+            ]
+        }
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.0|^10.0",
+        "orchestra/testbench": "^7.0|^8.0|^9.0"
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "scripts": {
+        "test": "vendor/bin/phpunit"
+    }
+}
