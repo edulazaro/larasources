@@ -362,29 +362,6 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
 
 
     /**
-     * Resolve the Source instance from DB or origin.
-     */
-    public static function resolveFromModel(object $model, string $name): static
-    {
-        $sources = method_exists($model, 'getSources') ? $model->getSources() : [];
-        $sourceClass = $sources[$name] ?? $name;
-
-        $record = SourceRecord::where('sourceable_type', $model->getMorphClass())
-            ->where('sourceable_id', $model->getKey())
-            ->where('name', $name)
-            ->first();
-
-        if ($record) {
-            return (new $sourceClass($record->attributes))->setRecord($record);
-        }
-
-        // fallback to origin
-        $source = new $sourceClass();
-        $source->setSourceable($model);
-        return $source->fetch();
-    }
-
-    /**
      * Build this source, write it to the origin and persist the record.
      *
      * The record is written only once the origin has returned, so a write that
@@ -1509,20 +1486,6 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     public function __unset($key)
     {
         unset($this->attributes[$key]);
-    }
-
-    /**
-     * Handle dynamic static method calls into the method.
-     *
-     * @param  string  $method
-     * @param  array   $parameters
-     * @return mixed
-     */
-    public static function __callStatic($method, $parameters)
-    {
-        $instance = new static;
-
-        return call_user_func_array([$instance, $method], $parameters);
     }
 
     /**
