@@ -11,7 +11,9 @@ use Illuminate\Contracts\Support\Jsonable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use EduLazaro\Larasources\Models\SourceRecord;
+use EduLazaro\Larasources\Enums\OriginStatus;
 use EduLazaro\Larasources\Exceptions\MassAssignmentException;
+use EduLazaro\Larasources\Exceptions\OriginException;
 use ReflectionClass;
 use RuntimeException;
 use EduLazaro\Larasources\Attributes\UsesOrigin;
@@ -38,6 +40,17 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     protected array $variantArguments = [];
 
     protected ?string $variant = null;
+
+    /**
+     * Seconds a record the origin left in `processing` is trusted for.
+     *
+     * A processing record holds what we sent, not necessarily what the service
+     * ended up with, so reading it goes back to the origin to reconcile it.
+     * This caps how often: publishing two hundred models at once must not turn
+     * the next listing into two hundred API calls. Override it per source,
+     * which is where how long that service takes is actually known.
+     */
+    protected int $checkProcessingAfter = 300;
 
     /**
      * Link to the SourceRecord in DB, if loaded from DB.
@@ -301,17 +314,84 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     }
 
     /**
-     * Save/update this source's data to the origin and persist to DB.
+     * Build this source, write it to the origin and persist the record.
+     *
+     * The record is written only once the origin has returned, so a write that
+     * fails leaves the stored data exactly as it was. Failures arrive as
+     * exceptions, which is what a queued job wants: it catches, backs off and
+     * retries. Use `trySave()` when the caller would rather branch than catch.
      */
     public function save(): static
     {
         $this->build();
-        $this->origin()->save($this->toArray());
 
-        return $this->persist();
+        $result = $this->pushToOrigin();
+
+        if ($result->failed()) {
+            $exception = $result->exception;
+
+            if ($exception instanceof OriginException) {
+                throw $exception;
+            }
+
+            throw new OriginException($result->message ?? 'The origin did not save ' . static::class . '.');
+        }
+
+        return $this->persist($result->status);
     }
 
-    public function persist(): static
+    /**
+     * Save without throwing, for callers that render instead of retrying.
+     *
+     * Nothing is persisted unless the origin took the data, and the result
+     * carries the reason when it did not, which a boolean could not.
+     */
+    public function trySave(): OriginResult
+    {
+        $this->build();
+
+        try {
+            $result = $this->pushToOrigin();
+        } catch (OriginException $e) {
+            return new OriginResult(
+                status: OriginStatus::Failed,
+                message: $e->getMessage(),
+                exception: $e,
+            );
+        }
+
+        if ($result->ok()) {
+            $this->persist($result->status);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Write to the origin and normalise what it reports back.
+     *
+     * An origin that returns its response array is saying `Saved`. Deciding
+     * whether a foreign service accepted the data is the origin's job: it is
+     * the only side that understands that API, so the package never reads the
+     * response to find out.
+     */
+    protected function pushToOrigin(): OriginResult
+    {
+        $returned = $this->origin()->save($this->toArray());
+
+        return $returned instanceof OriginResult
+            ? $returned
+            : new OriginResult(status: OriginStatus::Saved, data: $returned);
+    }
+
+    /**
+     * Write this source's record: one row per model, source and variant.
+     *
+     * `$status` is what the origin last said about this data. It defaults to
+     * `Saved` because the other caller is `fetch()`, and data read from the
+     * origin is data the origin has.
+     */
+    public function persist(?OriginStatus $status = null): static
     {
         $sourceable = $this->getSourceable();
 
@@ -332,6 +412,7 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
                 'signature' => md5(json_encode($this->toArray())),
                 'origin' => $this->origin()::getAlias(),
                 'attributes' => $this->toArray(),
+                'status' => ($status ?? OriginStatus::Saved)->value,
             ]
         );
 
@@ -392,16 +473,6 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     
         return $this->origin;
     }
-
-    /**
-     * Save/update this source's data to the origin.
-     */
-    public function saveToOrigin(): static
-    {
-        $data = $this->origin()->save($this->toArray());
-        return new static($data);
-    }
-
 
     /**
      * Regenerate this source's content (e.g. AI prompt).
@@ -1182,6 +1253,9 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
             if ($record) {
                 $this->record = $record;
                 $this->fill($record->attributes ?? []);
+
+                $this->reconcileProcessing($record);
+
                 return;
             }
         }
@@ -1203,6 +1277,35 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
      * @param  mixed  $value
      * @return void
      */
+    /**
+     * Bring a record the origin left in `processing` up to date.
+     *
+     * The origin had not finished with the data when it was written, so what
+     * is stored is what we sent. Reading it asks the origin again: that is the
+     * only thing that can turn it into `saved`, and it converges on whatever
+     * the service really ended up with, even if it rejected the payload.
+     *
+     * An origin that cannot answer, because it is a feed or because it is
+     * down, leaves the record exactly as it was. Never overwrite what we know
+     * with a local build: it would look confirmed without being it.
+     */
+    protected function reconcileProcessing(SourceRecord $record): void
+    {
+        if ($record->status !== OriginStatus::Processing) {
+            return;
+        }
+
+        if ($record->updated_at && $record->updated_at->gt(now()->subSeconds($this->checkProcessingAfter))) {
+            return;
+        }
+
+        try {
+            $this->fetch();
+        } catch (\Throwable $e) {
+            // The origin cannot tell us right now. What we know stays.
+        }
+    }
+
     public function __set($key, $value)
     {
         $this->setAttribute($key, $value);

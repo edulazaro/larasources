@@ -15,5 +15,6 @@ class City extends Model
 
     protected array $sources = [
         'weather' => WeatherSource::class,
+        'weather_eager' => EagerWeatherSource::class,
     ];
 }

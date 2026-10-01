@@ -20,6 +20,7 @@ Larasources lets your Eloquent models pull and push data from external services 
 
 - **Model-like Sources**: define external resources as classes with `fillable`, `casts`, accessors, and arguments
 - **Origins**: pluggable API clients (`fetch`, `save`, `delete`) decoupled from the data shape
+- **Outcomes the origin reports**: a write is stored only when the origin took it, and a service that has not finished yet says so
 - **Built-in caching** through the `sources` table (`SourceRecord`)
 - **Variants and arguments** to handle multiple operations or per-call parameters
 - **No package configuration**: credentials, timeout and retries belong to each origin
@@ -131,8 +132,15 @@ $weather = $city->source('weather');
 echo $weather->temperature;
 echo $weather->humidity;
 
-// Push data to the external API and persist locally
+// Push data to the external API and persist locally. Failures throw.
 $city->source('weather')->save();
+
+// Same, reporting the outcome instead of throwing
+$result = $city->source('weather')->trySave();
+
+if ($result->failed()) {
+    return back()->withErrors($result->message);
+}
 
 // Read live from the API and refresh the cached record
 $fresh = $city->source('weather')->fetch();
@@ -257,9 +265,9 @@ if ($source->record()) {
 // What the origin says right now, cached on the way out
 $source->fetch();
 
-// Compare the cached picture with the origin
-$cached = $source->record()?->attributes ?? [];
-$live = $source->fetch()->toArray();
+// Compare what is stored with what the origin has
+$stored = $source->record()->toArray();   // name, variant, origin, attributes, dates
+$live   = $source->fetch()->toArray();    // the fields, straight from the service
 
 // Clear the cache for this source
 $source->clear();
@@ -268,7 +276,62 @@ $source->clear();
 The cache does not expire on its own: once a record exists, reading attributes never calls
 the origin again. Refresh it when your app decides to, with `fetch()`.
 
+### Records the origin has not finished with
+
+Some services take the payload and publish it later. An origin says so by returning an
+`OriginResult` from `save()` instead of the response array:
+
+```php
+use EduLazaro\Larasources\Enums\OriginStatus;
+use EduLazaro\Larasources\OriginResult;
+
+public function save(array $data): array|OriginResult
+{
+    $response = $this->http()->post($this->endpoint, $data)->throw()->json();
+
+    return new OriginResult(
+        status: $response['published'] ? OriginStatus::Saved : OriginStatus::Processing,
+        data: $response,
+        message: $response['reason'] ?? null,
+    );
+}
+```
+
+The status is stored on the record, so a `processing` row says "the service took this and
+had not finished with it". Reading such a record goes back to the origin to reconcile it:
+that is the only thing that can turn it into `saved`, and it converges on whatever the
+service really ended up with, even when the payload was rejected in the end. An origin
+that cannot answer, because it is a feed or because it is down, leaves the record as it
+was.
+
+How long a `processing` record is trusted for is declared by the source, which is where
+how long that service takes is actually known:
+
+```php
+class ListingSource extends Source
+{
+    protected int $checkProcessingAfter = 600;   // seconds, 300 by default
+}
+```
+
+This matters: publishing two hundred models at once must not turn the next listing page
+into two hundred API calls. And what is still waiting is a query, not something your app
+has to remember:
+
+```php
+SourceRecord::where('status', OriginStatus::Processing)
+    ->where('updated_at', '<', now()->subHour())
+    ->get();
+```
+
+A record only exists because an origin took the data, so `status` holds `saved` or
+`processing`, never `failed`.
+
 ## Error handling
+
+An origin signals failure by throwing: returning means it took the data, and the source
+persists its record right after the call returns. So a failure that returns instead of
+throwing is stored as if it had worked.
 
 ```php
 use EduLazaro\Larasources\Exceptions\OriginException;
@@ -279,6 +342,23 @@ try {
     Log::error('Provider error: ' . $e->getMessage());
 }
 ```
+
+That is what a queued job wants: it catches, backs off and retries. When the caller would
+rather branch than catch, typically because it renders, `trySave()` returns the outcome and
+persists nothing unless the origin took the data:
+
+```php
+$result = $city->source('weather')->trySave();
+
+match ($result->status) {
+    OriginStatus::Saved      => $this->notify('Published'),
+    OriginStatus::Processing => $this->notify('Publishing'),
+    OriginStatus::Failed     => $this->notify($result->message),
+};
+```
+
+Nothing is written when a save fails, so what was already stored stays untouched: the
+record never gets ahead of the origin.
 
 ## Testing
 
@@ -297,8 +377,9 @@ $weather = $city->source('weather');
 ### Source
 
 - `fetch()`: read live from the origin and refresh the cached record
-- `save()`: push current attributes to the origin and persist
-- `saveToOrigin()`: push without persisting locally
+- `save()`: push current attributes to the origin and persist. Throws when the origin does not take them
+- `trySave()`: the same, returning an `OriginResult` instead of throwing
+- `persist(?OriginStatus $status)`: write the record for this source
 - `delete()`: delete remote and clear cache
 - `clear()`: clear cached record only
 - `origin()`: get the resolved Origin instance
@@ -311,12 +392,22 @@ $weather = $city->source('weather');
 ### Origin
 
 - `fetch(array $arguments): array`
-- `save(array $data): array`
+- `save(array $data): array|OriginResult`: return the response, or an `OriginResult` to report a status. Throw `OriginException` when the service did not take the data
 - `delete(): bool`
 - `regenerate(): array`
 - `getAlias(): string`
 - `config(?string $key, mixed $default)`: resolve this integration's settings, under `larasources.origins.{alias}`. Override it when they are not static
 - `http()`: HTTP client with the integration's `timeout` and `retry`
+
+### OriginResult
+
+What the origin reports about a write. `status` is an `OriginStatus` (`Saved`,
+`Processing`, `Failed`), `data` the response, `message` the reason when there is one and
+`exception` the cause of a failure.
+
+- `ok()`: the origin took the data, stored or being processed
+- `processing()`: the service has not finished with it
+- `failed()`: the service did not take it
 
 ### Bundled abstract Origins
 

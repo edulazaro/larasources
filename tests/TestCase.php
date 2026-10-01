@@ -3,12 +3,20 @@
 namespace EduLazaro\Larasources\Tests;
 
 use EduLazaro\Larasources\LarasourcesServiceProvider;
+use EduLazaro\Larasources\Tests\Fixtures\FakeWeatherOrigin;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Orchestra\Testbench\TestCase as BaseTestCase;
 
 abstract class TestCase extends BaseTestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        FakeWeatherOrigin::reset();
+    }
 
     protected function getPackageProviders($app): array
     {

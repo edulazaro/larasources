@@ -5,18 +5,20 @@ namespace EduLazaro\Larasources\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use EduLazaro\Larasources\Source;
+use EduLazaro\Larasources\Enums\OriginStatus;
 
 class SourceRecord extends Model
 {
     protected $table = 'sources';
 
     protected $fillable = [
-        'sourceable_type', 'sourceable_id', 'name', 'variant', 'signature', 'arguments', 'attributes', 'origin',
+        'sourceable_type', 'sourceable_id', 'name', 'variant', 'signature', 'arguments', 'attributes', 'origin', 'status',
     ];
 
     protected $casts = [
         'attributes' => 'array',
         'arguments' => 'array',
+        'status' => OriginStatus::class,
     ];
 
     public function sourceable(): MorphTo

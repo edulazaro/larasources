@@ -15,6 +15,7 @@ return new class extends Migration {
             $table->string('name');
             $table->string('origin')->nullable();
             $table->string('signature')->nullable();
+            $table->string('status', 20)->default('saved');
             $table->json('arguments')->nullable();
             $table->string('variant')->nullable();
             $table->json('attributes');

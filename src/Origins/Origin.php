@@ -3,6 +3,7 @@
 namespace EduLazaro\Larasources\Origins;
 
 use EduLazaro\Larasources\Source;
+use EduLazaro\Larasources\OriginResult;
 use EduLazaro\Larasources\Exceptions\OriginException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Config;
@@ -50,7 +51,19 @@ abstract class Origin
 
     abstract public function fetch(array $arguments = []): array;
 
-    public function save(array $data): array
+    /**
+     * Write this source's data to the origin.
+     *
+     * Returning means the origin took the data: the source persists its record
+     * right after this call returns. So when the service refuses the data,
+     * throw an `OriginException`. A failure that returns instead of throwing
+     * is stored as if it had worked, and no caller can tell the difference.
+     *
+     * Return the response array for the usual case, or an `OriginResult` when
+     * the service says something an array cannot, typically that it took the
+     * payload and has not finished with it yet (`OriginStatus::Processing`).
+     */
+    public function save(array $data): array|OriginResult
     {
         throw new OriginException('Save is not supported by ' . static::class);
     }
