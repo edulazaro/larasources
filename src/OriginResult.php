@@ -20,6 +20,15 @@ final class OriginResult
         public readonly array $data = [],
         public readonly ?string $message = null,
         public readonly ?Throwable $exception = null,
+
+        /**
+         * What the service calls this resource, when it says so.
+         *
+         * Optional: an origin that does not report one leaves the stored id
+         * untouched. Nothing is read out of `data` to guess it, because what
+         * the id is called in a response is that service's business.
+         */
+        public readonly ?string $externalId = null,
     ) {
     }
 

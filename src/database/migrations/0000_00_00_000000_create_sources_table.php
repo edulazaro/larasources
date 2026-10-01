@@ -16,12 +16,14 @@ return new class extends Migration {
             $table->string('origin')->nullable();
             $table->string('signature')->nullable();
             $table->string('status', 20)->default('saved');
+            $table->string('external_id')->nullable();
             $table->json('arguments')->nullable();
             $table->string('variant')->nullable();
             $table->json('attributes');
             $table->timestamps();
 
             $table->unique(['sourceable_type', 'sourceable_id', 'name', 'variant']);
+            $table->index(['name', 'external_id']);
         });
     }
 

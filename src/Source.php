@@ -282,8 +282,16 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     }
 
     /**
-     * Alias of record().
+     * What the service calls this resource, if it ever told us.
+     *
+     * This is what an origin reads to decide between creating and updating,
+     * instead of every application keeping its own column for it.
      */
+    public function externalId(): ?string
+    {
+        return $this->record()?->external_id;
+    }
+
     /**
      * Alias of record().
      */
@@ -340,7 +348,7 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
             throw new OriginException($result->message ?? 'The origin did not save ' . static::class . '.');
         }
 
-        return $this->persist($result->status);
+        return $this->persist($result->status, $result->externalId);
     }
 
     /**
@@ -364,7 +372,7 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
         }
 
         if ($result->ok()) {
-            $this->persist($result->status);
+            $this->persist($result->status, $result->externalId);
         }
 
         return $result;
@@ -394,7 +402,7 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
      * `Saved` because the other caller is `fetch()`, and data read from the
      * origin is data the origin has.
      */
-    public function persist(?OriginStatus $status = null): static
+    public function persist(?OriginStatus $status = null, ?string $externalId = null): static
     {
         $sourceable = $this->getSourceable();
 
@@ -404,6 +412,19 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
 
         $name = $this->name();
 
+        $values = [
+            'signature' => md5(json_encode($this->toArray())),
+            'origin' => $this->origin()::getAlias(),
+            'attributes' => $this->toArray(),
+            'status' => ($status ?? OriginStatus::Saved)->value,
+        ];
+
+        // Only written when the origin reported one, so reading (`fetch()`)
+        // keeps the id a previous write stored instead of clearing it.
+        if ($externalId !== null) {
+            $values['external_id'] = $externalId;
+        }
+
         $record = SourceRecord::updateOrCreate(
             [
                 'sourceable_type' => $sourceable->getMorphClass(),
@@ -411,12 +432,7 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
                 'name' => $name,
                 'variant' => $this->variant,
             ],
-            [
-                'signature' => md5(json_encode($this->toArray())),
-                'origin' => $this->origin()::getAlias(),
-                'attributes' => $this->toArray(),
-                'status' => ($status ?? OriginStatus::Saved)->value,
-            ]
+            $values
         );
 
         return $this->setRecord($record);

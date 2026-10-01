@@ -123,6 +123,57 @@ class SourceSaveTest extends TestCase
         $this->assertEquals(['temperature' => 21.5], SourceRecord::firstOrFail()->attributes);
     }
 
+    public function test_an_origin_can_report_what_the_service_calls_the_resource(): void
+    {
+        FakeWeatherOrigin::$saveResult = new OriginResult(
+            status: OriginStatus::Saved,
+            data: ['propertyId' => 'ad-1'],
+            externalId: 'ad-1',
+        );
+
+        $city = $this->city();
+        $city->source('weather')->save();
+
+        $this->assertSame('ad-1', SourceRecord::firstOrFail()->external_id);
+
+        // Which is what the next write reads to update instead of create.
+        $this->assertSame('ad-1', $city->source('weather')->externalId());
+    }
+
+    public function test_reading_from_the_origin_keeps_the_stored_external_id(): void
+    {
+        FakeWeatherOrigin::$saveResult = new OriginResult(status: OriginStatus::Saved, externalId: 'ad-1');
+
+        $city = $this->city();
+        $city->source('weather')->save();
+
+        FakeWeatherOrigin::$saveResult = null;
+
+        $city->source('weather')->fetch();
+
+        $this->assertSame('ad-1', SourceRecord::firstOrFail()->external_id);
+    }
+
+    public function test_an_origin_that_reports_no_external_id_leaves_it_empty(): void
+    {
+        $this->city()->source('weather')->save();
+
+        $this->assertNull(SourceRecord::firstOrFail()->external_id);
+        $this->assertNull($this->city()->source('weather')->externalId());
+    }
+
+    public function test_an_id_coming_from_outside_finds_the_local_model(): void
+    {
+        FakeWeatherOrigin::$saveResult = new OriginResult(status: OriginStatus::Saved, externalId: 'ad-1');
+
+        $city = $this->city();
+        $city->source('weather')->save();
+
+        $record = SourceRecord::where('name', 'weather')->where('external_id', 'ad-1')->firstOrFail();
+
+        $this->assertTrue($record->sourceable->is($city));
+    }
+
     public function test_the_payload_still_reaches_the_origin_untouched(): void
     {
         $this->city()->source('weather')->trySave();

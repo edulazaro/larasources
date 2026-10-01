@@ -361,6 +361,47 @@ Typed, autocompleted, and the name says what it does. The package deliberately h
 `run('someMethod')` dispatcher: it would trade methods for strings and let a caller fill a
 source from something that is not the source's data.
 
+### What the service calls it
+
+A write usually comes back with the service's own id for the resource. An origin reports it
+and the row keeps it, which is optional: an origin that reports nothing leaves it empty and
+nothing is read out of the response to guess it.
+
+```php
+return new OriginResult(
+    status: OriginStatus::Saved,
+    data: $response,
+    externalId: $response['propertyId'],
+);
+```
+
+It buys two things. The next write knows whether to create or update without the
+application passing the id in:
+
+```php
+public function save(array $data): array|OriginResult
+{
+    $id = $this->source->externalId();
+
+    $response = $id
+        ? $this->http()->put("{$this->baseUrl}/listings/{$id}", $data)->throw()->json()
+        : $this->http()->post("{$this->baseUrl}/listings", $data)->throw()->json();
+
+    return new OriginResult(OriginStatus::Saved, data: $response, externalId: $response['id']);
+}
+```
+
+And an id arriving from the outside, in a webhook or a reconciliation listing, finds the
+local model it belongs to:
+
+```php
+$record = SourceRecord::where('name', 'listing')->where('external_id', $id)->first();
+
+$property = $record?->sourceable;
+```
+
+A `fetch()` never clears it, because reading does not report one.
+
 ## Error handling
 
 An origin signals failure by throwing: returning means it took the data, and the source
@@ -414,6 +455,7 @@ $weather = $city->source('weather');
 - `save()`: push current attributes to the origin and persist. Throws when the origin does not take them
 - `trySave()`: the same, returning an `OriginResult` instead of throwing
 - `reconcile()`: re-read from the origin when the record is still `processing`, a no-op when it is not
+- `externalId()`: what the service calls this resource, when an origin has reported it
 - `persist(?OriginStatus $status)`: write the record for this source
 - `delete()`: delete remote and clear cache. The record stays when the origin throws, and also when it reports it did not delete anything
 - `clear()`: clear cached record only
@@ -441,8 +483,8 @@ $weather = $city->source('weather');
 ### OriginResult
 
 What the origin reports about a write. `status` is an `OriginStatus` (`Saved`,
-`Processing`, `Failed`), `data` the response, `message` the reason when there is one and
-`exception` the cause of a failure.
+`Processing`, `Failed`), `data` the response, `message` the reason when there is one,
+`exception` the cause of a failure and `externalId` the service's own id for the resource.
 
 - `ok()`: the origin took the data, stored or being processed
 - `processing()`: the service has not finished with it

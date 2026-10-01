@@ -12,7 +12,7 @@ class SourceRecord extends Model
     protected $table = 'sources';
 
     protected $fillable = [
-        'sourceable_type', 'sourceable_id', 'name', 'variant', 'signature', 'arguments', 'attributes', 'origin', 'status',
+        'sourceable_type', 'sourceable_id', 'name', 'variant', 'signature', 'arguments', 'attributes', 'origin', 'status', 'external_id',
     ];
 
     protected $casts = [
