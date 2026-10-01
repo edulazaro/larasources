@@ -402,6 +402,41 @@ $property = $record?->sourceable;
 
 A `fetch()` never clears it, because reading does not report one.
 
+### Sources with no model yet
+
+A row is identified by its model or, when there is none, by the external id. That covers
+the flow where the payload comes first and the thing it describes is derived from it: a
+scraper that reads a listing, stores each item, and only then decides what it becomes.
+
+```php
+// No model exists yet: the external id is the identity
+$scraped = (new ListingSource())->setExternalId($link)->fetch();
+
+// Whatever it turns out to be
+$property = Property::create(['reference' => $scraped->reference]);
+
+// And the row becomes that model's source
+$scraped->attachTo($property);
+```
+
+```php
+// What is still waiting
+SourceRecord::unattached()->where('name', 'ListingSource')->get();
+```
+
+Two things to know about it:
+
+- **Attaching re-keys the row.** A source's name is how its owner calls it, which is the
+  key the model maps the class under. With no model there is no map to ask, so the row is
+  named after the class, or after a `protected ?string $sourceName` the class declares.
+  `attachTo()` renames it to the model's key, which is what makes `$model->source('x')`
+  find it afterwards.
+- **A model holds one row per source and variant**, so attaching to a model that already
+  has one throws. Which of the two payloads matters is the caller's call, not ours.
+
+With neither a model nor an external id, nothing is stored: `(new ListingSource())->fetch()`
+reads the origin and fills the instance, which is what you want for a throwaway read.
+
 ## Error handling
 
 An origin signals failure by throwing: returning means it took the data, and the source
@@ -456,6 +491,8 @@ $weather = $city->source('weather');
 - `trySave()`: the same, returning an `OriginResult` instead of throwing
 - `reconcile()`: re-read from the origin when the record is still `processing`, a no-op when it is not
 - `externalId()`: what the service calls this resource, when an origin has reported it
+- `setExternalId(?string $id)`: name the resource before anything is stored, which is the identity of a source with no model
+- `attachTo(Model $model)`: give the stored row the model it belongs to, re-keyed to the model's name for it
 - `persist(?OriginStatus $status)`: write the record for this source
 - `delete()`: delete remote and clear cache. The record stays when the origin throws, and also when it reports it did not delete anything
 - `clear()`: clear cached record only
@@ -478,6 +515,8 @@ $weather = $city->source('weather');
 ### SourceRecord
 
 - `processing()`: scope over the records the origin had not finished with
+- `unattached()`: scope over the records that have no model yet
+- `attachTo(Model $model)`: set the row's model, throwing when it already has one for this source and variant
 - `toSource(string $sourceClass)`: turn the stored record back into a source
 
 ### OriginResult

@@ -11,7 +11,7 @@ return new class extends Migration {
         Schema::create('sources', function (Blueprint $table) {
 
             $table->id();
-            $table->morphs('sourceable');
+            $table->nullableMorphs('sourceable');
             $table->string('name');
             $table->string('origin')->nullable();
             $table->string('signature')->nullable();
@@ -24,6 +24,7 @@ return new class extends Migration {
 
             $table->unique(['sourceable_type', 'sourceable_id', 'name', 'variant']);
             $table->index(['name', 'external_id']);
+            $table->index(['name', 'variant', 'external_id']);
         });
     }
 

@@ -11,6 +11,7 @@ use Illuminate\Contracts\Support\Jsonable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use EduLazaro\Larasources\Models\SourceRecord;
+use Illuminate\Database\Eloquent\Model;
 use EduLazaro\Larasources\Enums\OriginStatus;
 use EduLazaro\Larasources\Exceptions\MassAssignmentException;
 use EduLazaro\Larasources\Exceptions\OriginException;
@@ -27,6 +28,22 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
      * Whether the stored record has been looked up for this instance.
      */
     protected bool $recordResolved = false;
+
+    /**
+     * What this source calls itself when no model is naming it.
+     *
+     * Only read when there is no model, or when the model's map does not
+     * mention this class.
+     */
+    protected ?string $sourceName = null;
+
+    /**
+     * What the service calls this resource, when it is known before storing.
+     *
+     * A source with no model is identified by this, which is what lets a
+     * scraped payload exist before the thing it will become.
+     */
+    protected ?string $externalId = null;
 
 
     /**
@@ -165,9 +182,13 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     }
 
     /**
-     * This source's name: the key it is mapped under on the model, falling back
-     * to the class basename. It identifies the cached record and the config
-     * block, so changing it orphans existing records.
+     * This source's name: how its owner calls it.
+     *
+     * It is the key the model maps this class under, because that is what the
+     * model will look it up by. Without a model there is no map to ask, so a
+     * source can state its own name and otherwise falls back to the class
+     * basename. It identifies the stored record and the config block, so
+     * changing it orphans existing records.
      */
     public function name(): string
     {
@@ -175,7 +196,13 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
             ? $this->sourceable->getSources()
             : [];
 
-        return array_search(static::class, $sources) ?: class_basename(static::class);
+        $mapped = array_search(static::class, $sources);
+
+        if (is_string($mapped) && $mapped !== '') {
+            return $mapped;
+        }
+
+        return $this->sourceName ?: class_basename(static::class);
     }
 
     /**
@@ -289,7 +316,40 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
      */
     public function externalId(): ?string
     {
-        return $this->record()?->external_id;
+        return $this->externalId ?? $this->record()?->external_id;
+    }
+
+    /**
+     * Name this resource as the service names it, before anything is stored.
+     *
+     * A source needs an identity to have a row, and that identity is either a
+     * model or this. Setting it is what makes a source with no model storable.
+     */
+    public function setExternalId(?string $externalId): static
+    {
+        $this->externalId = $externalId;
+        $this->recordResolved = false;
+
+        return $this;
+    }
+
+    /**
+     * Give this source's row the model it belongs to.
+     *
+     * For the flow where the payload comes first and the thing it describes is
+     * created from it: store it with an external id, create the model, attach.
+     */
+    public function attachTo(Model $model): static
+    {
+        // Resolved before the model arrives, because from then on `name()`
+        // answers with the model's key and would look for a different row.
+        $record = $this->record();
+
+        $this->setSourceable($model);
+
+        $record?->forceFill(['name' => $this->name()])->attachTo($model);
+
+        return $this;
     }
 
     /**
@@ -405,8 +465,12 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     public function persist(?OriginStatus $status = null, ?string $externalId = null): static
     {
         $sourceable = $this->getSourceable();
+        $externalId ??= $this->externalId;
+        $hasModel = $sourceable && method_exists($sourceable, 'getKey');
 
-        if (!$sourceable || !method_exists($sourceable, 'getKey')) {
+        // A row needs an identity, and it is either a model or the id the
+        // service gave the resource. With neither, this is a throwaway read.
+        if (!$hasModel && $externalId === null) {
             return $this;
         }
 
@@ -425,15 +489,22 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
             $values['external_id'] = $externalId;
         }
 
-        $record = SourceRecord::updateOrCreate(
-            [
+        $key = $hasModel
+            ? [
                 'sourceable_type' => $sourceable->getMorphClass(),
                 'sourceable_id' => $sourceable->getKey(),
                 'name' => $name,
                 'variant' => $this->variant,
-            ],
-            $values
-        );
+            ]
+            : [
+                'sourceable_type' => null,
+                'sourceable_id' => null,
+                'name' => $name,
+                'variant' => $this->variant,
+                'external_id' => $externalId,
+            ];
+
+        $record = SourceRecord::updateOrCreate($key, $values);
 
         return $this->setRecord($record);
     }
@@ -541,16 +612,24 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
         $this->recordResolved = true;
 
         $sourceable = $this->getSourceable();
+        $hasModel = $sourceable && method_exists($sourceable, 'getKey');
 
-        if (!$sourceable || !method_exists($sourceable, 'getKey')) {
+        if (!$hasModel && $this->externalId === null) {
             return null;
         }
 
-        return $this->record = SourceRecord::where('sourceable_type', $sourceable->getMorphClass())
-            ->where('sourceable_id', $sourceable->getKey())
-            ->where('name', $this->name())
-            ->where('variant', $this->variant)
-            ->first();
+        $query = SourceRecord::where('name', $this->name())
+            ->where('variant', $this->variant);
+
+        if ($hasModel) {
+            $query->where('sourceable_type', $sourceable->getMorphClass())
+                ->where('sourceable_id', $sourceable->getKey());
+        } else {
+            $query->whereNull('sourceable_id')
+                ->where('external_id', $this->externalId);
+        }
+
+        return $this->record = $query->first();
     }
 
     /**
@@ -1331,14 +1410,10 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     {
         $this->fetched = true;
 
-        if ($this->sourceable && method_exists($this->sourceable, 'getKey')) {
-            $record = $this->findRecord();
+        if ($record = $this->findRecord()) {
+            $this->fill($record->attributes ?? []);
 
-            if ($record) {
-                $this->fill($record->attributes ?? []);
-
-                return;
-            }
+            return;
         }
 
         try {

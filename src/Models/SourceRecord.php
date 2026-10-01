@@ -3,6 +3,7 @@
 namespace EduLazaro\Larasources\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use RuntimeException;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use EduLazaro\Larasources\Source;
 use EduLazaro\Larasources\Enums\OriginStatus;
@@ -32,6 +33,50 @@ class SourceRecord extends Model
     public function scopeProcessing($query)
     {
         return $query->where('status', OriginStatus::Processing);
+    }
+
+    /**
+     * Rows that do not belong to a model yet, identified by their external id.
+     */
+    public function scopeUnattached($query)
+    {
+        return $query->whereNull('sourceable_id');
+    }
+
+    /**
+     * Give this row the model it belongs to.
+     *
+     * A model holds one row per source and variant, so an existing one is a
+     * conflict the caller has to resolve: either that row is the good one, or
+     * it goes before this one takes its place. Silently merging them would
+     * throw away whichever payload the caller cared less about, and only the
+     * caller knows which that is.
+     */
+    public function attachTo(Model $model): static
+    {
+        $existing = static::query()
+            ->where('sourceable_type', $model->getMorphClass())
+            ->where('sourceable_id', $model->getKey())
+            ->where('name', $this->name)
+            ->where('variant', $this->variant)
+            ->whereKeyNot($this->getKey())
+            ->first();
+
+        if ($existing) {
+            throw new RuntimeException(sprintf(
+                '%s [%s] already has a `%s` source%s, stored as row %s.',
+                $model->getMorphClass(),
+                $model->getKey(),
+                $this->name,
+                $this->variant ? " for variant `{$this->variant}`" : '',
+                $existing->getKey(),
+            ));
+        }
+
+        $this->sourceable()->associate($model);
+        $this->save();
+
+        return $this;
     }
 
     public function sourceArguments()
