@@ -125,6 +125,24 @@ class SourceProcessingTest extends TestCase
         $this->assertSame(OriginStatus::Saved, $reconciled->status);
     }
 
+    public function test_a_variant_record_turns_back_into_the_same_variant(): void
+    {
+        FakeWeatherOrigin::$saveResult = new OriginResult(status: OriginStatus::Processing);
+
+        $city = $this->city();
+        $city->source('weather', null, 'sale')->trySave();
+
+        FakeWeatherOrigin::$saveResult = null;
+
+        $source = SourceRecord::firstOrFail()->toSource(WeatherSource::class);
+        $source->reconcile();
+
+        $this->assertSame(1, FakeWeatherOrigin::$fetchCalls);
+        $this->assertSame(1, SourceRecord::count());
+        $this->assertSame('sale', SourceRecord::firstOrFail()->variant);
+        $this->assertSame(OriginStatus::Saved, SourceRecord::firstOrFail()->status);
+    }
+
     public function test_the_scope_leaves_saved_records_out(): void
     {
         $this->city()->source('weather')->save();

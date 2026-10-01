@@ -63,10 +63,17 @@ class SourceRecord extends Model
     }
     
     /**
-     * Returns the data as a source class instance.
+     * Turn this row back into its source.
+     *
+     * The variant and the row itself travel with it, or the source would look
+     * like a different one: `persist()` keys on the variant, so a source built
+     * without it writes a second row instead of updating this one.
      */
     public function toSource(string $sourceClass): Source
     {
-        return (new $sourceClass($this->getAttribute('attributes') ?? []))->setSourceable($this->sourceable);
+        return (new $sourceClass($this->getAttribute('attributes') ?? []))
+            ->setVariant($this->variant)
+            ->setSourceable($this->sourceable)
+            ->setRecord($this);
     }
 }
