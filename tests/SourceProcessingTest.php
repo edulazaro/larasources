@@ -109,6 +109,22 @@ class SourceProcessingTest extends TestCase
         $this->assertSame(OriginStatus::Saved, SourceRecord::firstOrFail()->status);
     }
 
+    public function test_reconciling_leaves_the_record_loaded_so_it_can_be_chained(): void
+    {
+        $city = $this->city();
+        $city->source('weather')->save();
+
+        $record = $city->source('weather')->reconcile()->record();
+
+        $this->assertNotNull($record);
+        $this->assertSame(OriginStatus::Saved, $record->status);
+        $this->assertSame(0, FakeWeatherOrigin::$fetchCalls);
+
+        $reconciled = $this->cityWithProcessingRecord()->source('weather')->reconcile()->record();
+
+        $this->assertSame(OriginStatus::Saved, $reconciled->status);
+    }
+
     public function test_the_scope_leaves_saved_records_out(): void
     {
         $this->city()->source('weather')->save();

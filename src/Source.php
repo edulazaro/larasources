@@ -461,11 +461,15 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     {
         $record = $this->findRecord();
 
-        if (!$record || $record->status !== OriginStatus::Processing) {
+        if (!$record) {
             return $this;
         }
 
         $this->setRecord($record);
+
+        if ($record->status !== OriginStatus::Processing) {
+            return $this;
+        }
 
         return $this->fetch();
     }
