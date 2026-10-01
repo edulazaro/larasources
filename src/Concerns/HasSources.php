@@ -9,38 +9,22 @@ use InvalidArgumentException;
 trait HasSources
 {
     /**
-     * @var array $sources Stores the sources mapping
-     */
-    protected array $sources = [];
-
-    /**
      * @var array $mockedSources Stores mocked source instances for testing purposes.
      */
     protected array $mockedSources = [];
 
     /**
-     * Declare the source mapping.
+     * The sources mapping declared by the model.
      *
-     * Use this instead of the `$sources` property when the mapping is static:
-     * PHP rejects redeclaring a trait property with a different default, so a
-     * model that writes `protected array $sources = [...]` fails to compose and
-     * has to fill the property in its constructor.
-     *
-     * @return array<string, class-string<Source>>
-     */
-    protected function sources(): array
-    {
-        return [];
-    }
-
-    /**
-     * The effective source mapping: the property first, the method on top.
+     * The `$sources` property is not declared here on purpose: PHP only allows
+     * a class to redeclare a trait property with the same default, so declaring
+     * it would stop the model from writing its own map.
      *
      * @return array<string, class-string<Source>>
      */
     public function getSources(): array
     {
-        return array_merge($this->sources, $this->sources());
+        return $this->sources ?? [];
     }
 
     /**

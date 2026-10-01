@@ -6,7 +6,6 @@ use EduLazaro\Larasources\Models\SourceArgument;
 use EduLazaro\Larasources\Models\SourceRecord;
 use EduLazaro\Larasources\Tests\Fixtures\City;
 use EduLazaro\Larasources\Tests\Fixtures\FakeWeatherOrigin;
-use EduLazaro\Larasources\Tests\Fixtures\Town;
 use EduLazaro\Larasources\Tests\Fixtures\WeatherSource;
 
 class SourceArgumentsTest extends TestCase
@@ -46,21 +45,6 @@ class SourceArgumentsTest extends TestCase
             'region' => null,
             'city_id' => null,
         ], (new WeatherSource())->resolveArguments());
-    }
-
-    public function test_a_model_can_declare_its_sources_with_the_method(): void
-    {
-        $town = Town::create([
-            'name' => 'Ourense',
-            'external_id' => 'town-7',
-            'region_code' => 'GA',
-        ]);
-
-        $source = $town->source('weather');
-
-        $this->assertInstanceOf(WeatherSource::class, $source);
-        $this->assertSame('town-7', $source->resolveArguments()['city_id']);
-        $this->assertSame(['weather' => WeatherSource::class], $town->getSources());
     }
 
     public function test_runtime_arguments_take_precedence_over_the_map(): void

@@ -13,16 +13,7 @@ class City extends Model
 
     protected $guarded = [];
 
-    /**
-     * The map is filled in the constructor because the trait already declares
-     * the property and PHP rejects a redeclaration with a different default.
-     */
-    public function __construct(array $attributes = [])
-    {
-        parent::__construct($attributes);
-
-        $this->sources = [
-            'weather' => WeatherSource::class,
-        ];
-    }
+    protected array $sources = [
+        'weather' => WeatherSource::class,
+    ];
 }

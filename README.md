@@ -115,18 +115,11 @@ class City extends Model
 {
     use HasSources;
 
-    protected function sources(): array
-    {
-        return [
-            'weather' => WeatherSource::class,
-        ];
-    }
+    protected array $sources = [
+        'weather' => WeatherSource::class,
+    ];
 }
 ```
-
-The trait already declares a `$sources` property, and PHP refuses to compose a class that
-redeclares it with a different default, so declare the mapping with the `sources()` method.
-Assigning `$this->sources` from the constructor also works and takes lower precedence.
 
 ### 2. Read and write through the source
 
