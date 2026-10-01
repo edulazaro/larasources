@@ -15,5 +15,8 @@ class City extends Model
 
     protected array $sources = [
         'weather' => WeatherSource::class,
+        'listing' => ListingSource::class,
+        'recipe' => RecipeSource::class,
+        'copy' => CopySource::class,
     ];
 }

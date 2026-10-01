@@ -103,8 +103,15 @@ abstract class Origin
 
     abstract public static function getAlias(): string;
 
+    /**
+     * Whether this origin has what it needs to talk to its service.
+     *
+     * True unless an origin says otherwise, because the package ships no
+     * configuration and an integration's credentials often come from the
+     * database. Override it with the check that matters for yours.
+     */
     public function isConfigured(): bool
     {
-        return !empty($this->config());
+        return true;
     }
 }

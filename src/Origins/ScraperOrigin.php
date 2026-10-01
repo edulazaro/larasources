@@ -65,7 +65,13 @@ abstract class ScraperOrigin extends Origin
     protected function extractWithDom(string $html): array
     {
         $dom = new \DOMDocument();
-        @$dom->loadHTML($html, LIBXML_NOERROR);
+
+        // Without a charset declaration libxml reads the page as ISO-8859-1 and
+        // every accent comes out mangled. Numeric entities survive that.
+        @$dom->loadHTML(
+            mb_encode_numericentity($html, [0x80, 0x10FFFF, 0, 0x1FFFFF], 'UTF-8'),
+            LIBXML_NOERROR
+        );
         $xpath = new \DOMXPath($dom);
         $data = [];
 
@@ -78,21 +84,43 @@ abstract class ScraperOrigin extends Origin
         return $data;
     }
 
+    /**
+     * Translate a simple CSS selector into XPath.
+     *
+     * Tags, ids, classes and descendants, which is what `selectors()` is for.
+     * Anything beyond that wants a real CSS selector library, and larascraper
+     * is used instead when it is installed.
+     */
     protected function cssToXpath(string $css): string
     {
-        $xpath = './/' . preg_replace_callback('/([a-zA-Z0-9\-]+)?(?:#([a-zA-Z0-9\-_]+))?(?:\.([a-zA-Z0-9\-_]+))?/', function ($m) {
-            $tag = $m[1] ?: '*';
-            $expr = $tag;
-            if (!empty($m[2])) {
-                $expr .= "[@id='{$m[2]}']";
-            }
-            if (!empty($m[3])) {
-                $expr .= "[contains(concat(' ',normalize-space(@class),' '),' {$m[3]} ')]";
-            }
-            return $expr;
-        }, $css);
+        $steps = preg_split('/\s+/', trim($css), -1, PREG_SPLIT_NO_EMPTY) ?: [];
 
-        return str_replace(' ', '//', $xpath);
+        $path = '';
+
+        foreach ($steps as $step) {
+            $path .= '//' . $this->cssStepToXpath($step);
+        }
+
+        return '.' . ($path ?: '//*');
+    }
+
+    protected function cssStepToXpath(string $step): string
+    {
+        preg_match('/^([a-zA-Z0-9\-]+)?(#[a-zA-Z0-9\-_]+)?((?:\.[a-zA-Z0-9\-_]+)*)$/', $step, $matches);
+
+        $tag = $matches[1] ?? '';
+
+        $expression = $tag !== '' ? $tag : '*';
+
+        if (!empty($matches[2])) {
+            $expression .= "[@id='" . ltrim($matches[2], '#') . "']";
+        }
+
+        foreach (array_filter(explode('.', $matches[3] ?? '')) as $class) {
+            $expression .= "[contains(concat(' ',normalize-space(@class),' '),' {$class} ')]";
+        }
+
+        return $expression;
     }
 
     protected function transformResponse(array $data): array

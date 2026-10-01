@@ -532,9 +532,10 @@ What the origin reports about a write. `status` is an `OriginStatus` (`Saved`,
 
 ### Bundled abstract Origins
 
-- `Origin`: base class
-- `RemoteOrigin`: generic REST client base
-- `AgentOrigin`: for agent-style integrations
+- `Origin`: base class. `isConfigured()` is true unless an origin says otherwise
+- `RemoteOrigin`: generic REST client. Declares `$baseUrl`, `$authType` (`none`, `bearer`, `basic`, `key`) and an `endpoint()`; creates with POST or updates with PUT depending on the stored external id, treats a 404 on delete as already deleted, and reports the response's `id` as the external id (override `externalIdFrom()`)
+- `ScraperOrigin`: declares a `url()` and `selectors()` (tags, ids, classes and descendants). Uses larascraper when it is installed, and its own DOM reader otherwise
+- `AgentOrigin`: a source whose content a model writes. Declares a `prompt()`, a `$provider` (`anthropic` or `openai`), `$model`, and reads its key from the integration's `api_key`
 - `ScraperOrigin`: for HTML scraping with `getHtml()` helper
 
 ## Testing
