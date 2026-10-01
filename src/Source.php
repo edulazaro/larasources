@@ -165,15 +165,6 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     }
 
     /**
-     * Resolve the argument map into actual values.
-     *
-     * The map declares which attribute of the sourceable feeds each argument,
-     * as in `['city_id' => 'external_id']`, and the resolved array carries the
-     * value of `$city->external_id`. Precedence, from lowest to highest: the
-     * `$arguments` property, the `arguments()` method, the stored record and
-     * the runtime arguments passed to `source()`.
-     */
-    /**
      * This source's name: the key it is mapped under on the model, falling back
      * to the class basename. It identifies the cached record and the config
      * block, so changing it orphans existing records.
@@ -205,6 +196,15 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
         return Config::get($configKey, $default);
     }
 
+    /**
+     * Resolve the argument map into actual values.
+     *
+     * The map declares which attribute of the sourceable feeds each argument,
+     * as in `['city_id' => 'external_id']`, and the resolved array carries the
+     * value of `$city->external_id`. Precedence, from lowest to highest: the
+     * `$arguments` property, the `arguments()` method, the stored record and
+     * the runtime arguments passed to `source()`.
+     */
     public function resolveArguments(): array
     {
         $argumentMap = array_merge($this->arguments, $this->arguments());
@@ -217,8 +217,8 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
                 : null;
         }
 
-        if ($this->record) {
-            $resolvedArguments = array_merge($resolvedArguments, $this->record->arguments);
+        if ($record = $this->record()) {
+            $resolvedArguments = array_merge($resolvedArguments, $record->arguments);
         }
 
         return empty($this->variantArguments) ? $resolvedArguments : array_merge($resolvedArguments, $this->variantArguments);
@@ -422,12 +422,21 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
         return $this->setRecord($record);
     }
 
+    /**
+     * Delete this resource at the origin and drop the local record.
+     *
+     * Failure is an exception, as everywhere else: it propagates and the record
+     * stays. An origin that instead returns a literal `false` is saying it did
+     * not delete anything, and the record stays for that too. Clearing it then
+     * would leave the database claiming the resource is gone while the service
+     * still has it, which is the one direction that must never happen.
+     */
     public function delete(): bool
-    {    
-        if (method_exists($this->origin(), 'delete')) {
-            $this->origin()->delete();
+    {
+        if (method_exists($this->origin(), 'delete') && $this->origin()->delete() === false) {
+            return false;
         }
-    
+
         return $this->clear();
     }
     
@@ -1320,7 +1329,6 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
             $record = $this->findRecord();
 
             if ($record) {
-                $this->record = $record;
                 $this->fill($record->attributes ?? []);
 
                 return;

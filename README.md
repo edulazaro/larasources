@@ -383,7 +383,7 @@ $weather = $city->source('weather');
 - `trySave()`: the same, returning an `OriginResult` instead of throwing
 - `reconcile()`: re-read from the origin when the record is still `processing`, a no-op when it is not
 - `persist(?OriginStatus $status)`: write the record for this source
-- `delete()`: delete remote and clear cache
+- `delete()`: delete remote and clear cache. The record stays when the origin throws, and also when it reports it did not delete anything
 - `clear()`: clear cached record only
 - `origin()`: get the resolved Origin instance
 - `record()`, `getRecord()`: the stored `SourceRecord`, or `null`. Looked up in the table the first time it is asked for, never from the origin

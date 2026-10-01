@@ -99,9 +99,4 @@ abstract class ScraperOrigin extends Origin
     {
         return $data;
     }
-
-    protected static function getConfigKey(): string
-    {
-        return 'scraper';
-    }
 }

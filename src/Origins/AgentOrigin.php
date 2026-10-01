@@ -109,9 +109,4 @@ abstract class AgentOrigin extends Origin
 
         return $response->json('choices.0.message.content');
     }
-
-    protected static function getConfigKey(): string
-    {
-        return 'agent';
-    }
 }

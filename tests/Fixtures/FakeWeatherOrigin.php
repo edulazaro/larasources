@@ -29,6 +29,9 @@ class FakeWeatherOrigin extends Origin
     /** When set, fetch() throws it. */
     public static ?Throwable $fetchException = null;
 
+    /** What delete() reports. */
+    public static bool $deleteResult = true;
+
     public static function reset(): void
     {
         static::$lastFetchArguments = [];
@@ -38,6 +41,7 @@ class FakeWeatherOrigin extends Origin
         static::$saveResult = null;
         static::$saveException = null;
         static::$fetchException = null;
+        static::$deleteResult = true;
     }
 
     public static function getAlias(): string
@@ -72,6 +76,6 @@ class FakeWeatherOrigin extends Origin
     {
         static::$deleted = true;
 
-        return true;
+        return static::$deleteResult;
     }
 }

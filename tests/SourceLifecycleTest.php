@@ -101,6 +101,29 @@ class SourceLifecycleTest extends TestCase
         $this->assertSame(0, SourceRecord::count());
     }
 
+    public function test_an_origin_that_did_not_delete_keeps_the_record(): void
+    {
+        $city = $this->city();
+        $city->source('weather')->fetch();
+
+        FakeWeatherOrigin::$deleteResult = false;
+
+        $this->assertFalse($city->source('weather')->delete());
+        $this->assertSame(1, SourceRecord::count());
+    }
+
+    public function test_the_stored_arguments_reach_a_source_that_has_not_read_anything(): void
+    {
+        $city = $this->city();
+        $city->source('weather')->fetch();
+
+        SourceRecord::firstOrFail()->update(['arguments' => ['city_id' => 'stored-7']]);
+
+        $arguments = $city->source('weather')->resolveArguments();
+
+        $this->assertSame('stored-7', $arguments['city_id']);
+    }
+
     public function test_a_mocked_source_replaces_the_real_one(): void
     {
         $city = $this->city();

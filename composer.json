@@ -1,7 +1,7 @@
 {
     "name": "edulazaro/larasources",
-    "description": "Integrate external data sources into Laravel models with caching, retry and rate-limiting. Sources are model-like classes; Origins are pluggable API clients.",
-    "keywords": ["laravel", "eloquent", "external-api", "integration", "caching", "rate-limiting", "data-sources"],
+    "description": "Integrate external data sources into Laravel models. Sources are model-like classes, Origins are pluggable API clients, and the external state is kept in one table.",
+    "keywords": ["laravel", "eloquent", "external-api", "integration", "caching", "data-sources"],
     "license": "MIT",
     "type": "library",
     "require": {
