@@ -26,6 +26,14 @@ class SourceRecord extends Model
         return $this->morphTo();
     }
 
+    /**
+     * Records the origin had not finished with, which `reconcile()` resolves.
+     */
+    public function scopeProcessing($query)
+    {
+        return $query->where('status', OriginStatus::Processing);
+    }
+
     public function sourceArguments()
     {
         // The foreign key is `source_id`, not the `source_record_id` Eloquent

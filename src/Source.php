@@ -41,16 +41,6 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
 
     protected ?string $variant = null;
 
-    /**
-     * Seconds a record the origin left in `processing` is trusted for.
-     *
-     * A processing record holds what we sent, not necessarily what the service
-     * ended up with, so reading it goes back to the origin to reconcile it.
-     * This caps how often: publishing two hundred models at once must not turn
-     * the next listing into two hundred API calls. Override it per source,
-     * which is where how long that service takes is actually known.
-     */
-    protected int $checkProcessingAfter = 300;
 
     /**
      * Link to the SourceRecord in DB, if loaded from DB.
@@ -449,6 +439,57 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
         $this->fill($data);
 
         return $this->persist();
+    }
+
+    /**
+     * Re-read from the origin when the stored record is still `processing`.
+     *
+     * The origin had not finished with the data when the record was written,
+     * so what is stored is what we sent. This is the only thing that turns it
+     * into `saved`, and it converges on whatever the service really ended up
+     * with, even if it rejected the payload in the end.
+     *
+     * Opt in, and chainable: nothing in this package calls an origin while you
+     * read. Put it where the latency is yours to spend, which is a scheduled
+     * command and not a page render, over `SourceRecord::processing()`.
+     *
+     * A record that is not processing, or no record at all, is left alone. A
+     * failure is the caller's to handle: looping over many of these, you decide
+     * whether one service being down stops the rest.
+     */
+    public function reconcile(): static
+    {
+        $record = $this->findRecord();
+
+        if (!$record || $record->status !== OriginStatus::Processing) {
+            return $this;
+        }
+
+        $this->setRecord($record);
+
+        return $this->fetch();
+    }
+
+    /**
+     * The stored record for this source, without ever calling the origin.
+     */
+    protected function findRecord(): ?SourceRecord
+    {
+        if ($this->record) {
+            return $this->record;
+        }
+
+        $sourceable = $this->getSourceable();
+
+        if (!$sourceable || !method_exists($sourceable, 'getKey')) {
+            return null;
+        }
+
+        return SourceRecord::where('sourceable_type', $sourceable->getMorphClass())
+            ->where('sourceable_id', $sourceable->getKey())
+            ->where('name', $this->name())
+            ->where('variant', $this->variant)
+            ->first();
     }
 
     /**
@@ -1240,21 +1281,11 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
         $this->fetched = true;
 
         if ($this->sourceable && method_exists($this->sourceable, 'getKey')) {
-            $name = $this->name();
-
-            $morphType = $this->sourceable->getMorphClass();
-
-            $record = SourceRecord::where('sourceable_type', $morphType)
-                ->where('sourceable_id', $this->sourceable->getKey())
-                ->where('name', $name)
-                ->where('variant', $this->variant)
-                ->first();
+            $record = $this->findRecord();
 
             if ($record) {
                 $this->record = $record;
                 $this->fill($record->attributes ?? []);
-
-                $this->reconcileProcessing($record);
 
                 return;
             }
@@ -1277,35 +1308,6 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
      * @param  mixed  $value
      * @return void
      */
-    /**
-     * Bring a record the origin left in `processing` up to date.
-     *
-     * The origin had not finished with the data when it was written, so what
-     * is stored is what we sent. Reading it asks the origin again: that is the
-     * only thing that can turn it into `saved`, and it converges on whatever
-     * the service really ended up with, even if it rejected the payload.
-     *
-     * An origin that cannot answer, because it is a feed or because it is
-     * down, leaves the record exactly as it was. Never overwrite what we know
-     * with a local build: it would look confirmed without being it.
-     */
-    protected function reconcileProcessing(SourceRecord $record): void
-    {
-        if ($record->status !== OriginStatus::Processing) {
-            return;
-        }
-
-        if ($record->updated_at && $record->updated_at->gt(now()->subSeconds($this->checkProcessingAfter))) {
-            return;
-        }
-
-        try {
-            $this->fetch();
-        } catch (\Throwable $e) {
-            // The origin cannot tell us right now. What we know stays.
-        }
-    }
-
     public function __set($key, $value)
     {
         $this->setAttribute($key, $value);

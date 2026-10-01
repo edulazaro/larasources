@@ -298,30 +298,32 @@ public function save(array $data): array|OriginResult
 ```
 
 The status is stored on the record, so a `processing` row says "the service took this and
-had not finished with it". Reading such a record goes back to the origin to reconcile it:
-that is the only thing that can turn it into `saved`, and it converges on whatever the
-service really ended up with, even when the payload was rejected in the end. An origin
-that cannot answer, because it is a feed or because it is down, leaves the record as it
-was.
+had not finished with it". Reading it never calls the origin: nothing in this package goes
+to a service while you read an attribute of a record that exists.
 
-How long a `processing` record is trusted for is declared by the source, which is where
-how long that service takes is actually known:
+What is still waiting is a query, not something your app has to remember:
 
 ```php
-class ListingSource extends Source
-{
-    protected int $checkProcessingAfter = 600;   // seconds, 300 by default
-}
+SourceRecord::processing()->where('updated_at', '<', now()->subHour())->get();
 ```
 
-This matters: publishing two hundred models at once must not turn the next listing page
-into two hundred API calls. And what is still waiting is a query, not something your app
-has to remember:
+And `reconcile()` resolves one. It re-reads from the origin when the record is still
+processing and leaves it alone when it is not, which is the only thing that turns it into
+`saved`. It converges on whatever the service really ended up with, even when the payload
+was rejected in the end:
 
 ```php
-SourceRecord::where('status', OriginStatus::Processing)
-    ->where('updated_at', '<', now()->subHour())
-    ->get();
+// Where the latency is yours to spend: a scheduled command, not a page render
+foreach (SourceRecord::processing()->get() as $record) {
+    try {
+        $record->toSource(ListingSource::class)->reconcile();
+    } catch (OriginException $e) {
+        // One service being down does not stop the rest
+    }
+}
+
+// Or on the source you already have
+$listing = $property->source('listing')->reconcile();
 ```
 
 A record only exists because an origin took the data, so `status` holds `saved` or
@@ -379,6 +381,7 @@ $weather = $city->source('weather');
 - `fetch()`: read live from the origin and refresh the cached record
 - `save()`: push current attributes to the origin and persist. Throws when the origin does not take them
 - `trySave()`: the same, returning an `OriginResult` instead of throwing
+- `reconcile()`: re-read from the origin when the record is still `processing`, a no-op when it is not
 - `persist(?OriginStatus $status)`: write the record for this source
 - `delete()`: delete remote and clear cache
 - `clear()`: clear cached record only
@@ -398,6 +401,11 @@ $weather = $city->source('weather');
 - `getAlias(): string`
 - `config(?string $key, mixed $default)`: resolve this integration's settings, under `larasources.origins.{alias}`. Override it when they are not static
 - `http()`: HTTP client with the integration's `timeout` and `retry`
+
+### SourceRecord
+
+- `processing()`: scope over the records the origin had not finished with
+- `toSource(string $sourceClass)`: turn the stored record back into a source
 
 ### OriginResult
 
