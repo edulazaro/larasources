@@ -73,11 +73,6 @@ abstract class Origin
         throw new OriginException('Delete is not supported by ' . static::class);
     }
 
-    public function regenerate(): array
-    {
-        return $this->fetch($this->source->resolveArguments());
-    }
-
     /**
      * This integration's settings.
      *

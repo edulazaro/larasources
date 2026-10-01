@@ -561,16 +561,6 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     }
 
     /**
-     * Regenerate this source's content (e.g. AI prompt).
-     */
-    public function regenerate(): static
-    {
-        $data = $this->origin()->regenerate();
-        return new static($data);
-    }
-
-
-    /**
      * Dynamic casting support for collections.
      */
     protected function castAttribute($key, $value)

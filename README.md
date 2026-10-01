@@ -333,6 +333,34 @@ $listing = $property->source('listing')->reconcile();
 A record only exists because an origin took the data, so `status` holds `saved` or
 `processing`, never `failed`.
 
+### Operations beyond fetch, save and delete
+
+An origin's own methods are callable, because `origin()` is public. Use that when you just
+want the answer:
+
+```php
+$info = $property->source('listing')->origin()->fetchQuota();
+```
+
+And when the answer *is* the source's new state, name it on your source and write it
+through with the same two public calls `fetch()` uses:
+
+```php
+class AdvertDescriptionSource extends Source
+{
+    public function regenerateFromBriefing(string $briefing): static
+    {
+        $this->fill($this->origin()->generateFromBriefing($briefing));
+
+        return $this->persist();
+    }
+}
+```
+
+Typed, autocompleted, and the name says what it does. The package deliberately has no
+`run('someMethod')` dispatcher: it would trade methods for strings and let a caller fill a
+source from something that is not the source's data.
+
 ## Error handling
 
 An origin signals failure by throwing: returning means it took the data, and the source
@@ -401,7 +429,6 @@ $weather = $city->source('weather');
 - `fetch(array $arguments): array`
 - `save(array $data): array|OriginResult`: return the response, or an `OriginResult` to report a status. Throw `OriginException` when the service did not take the data
 - `delete(): bool`
-- `regenerate(): array`
 - `getAlias(): string`
 - `config(?string $key, mixed $default)`: resolve this integration's settings, under `larasources.origins.{alias}`. Override it when they are not static
 - `http()`: HTTP client with the integration's `timeout` and `retry`
