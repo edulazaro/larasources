@@ -410,7 +410,7 @@ scraper that reads a listing, stores each item, and only then decides what it be
 
 ```php
 // No model exists yet: the external id is the identity
-$scraped = (new ListingSource())->setExternalId($link)->fetch();
+$scraped = ListingSource::make()->setExternalId($link)->fetch();
 
 // Whatever it turns out to be
 $property = Property::create(['reference' => $scraped->reference]);
@@ -434,7 +434,7 @@ Two things to know about it:
 - **A model holds one row per source and variant**, so attaching to a model that already
   has one throws. Which of the two payloads matters is the caller's call, not ours.
 
-With neither a model nor an external id, nothing is stored: `(new ListingSource())->fetch()`
+With neither a model nor an external id, nothing is stored: `ListingSource::make()->fetch()`
 reads the origin and fills the instance, which is what you want for a throwaway read.
 
 ## Error handling
@@ -491,6 +491,7 @@ $weather = $city->source('weather');
 - `trySave()`: the same, returning an `OriginResult` instead of throwing
 - `reconcile()`: re-read from the origin when the record is still `processing`, a no-op when it is not
 - `externalId()`: what the service calls this resource, when an origin has reported it
+- `make(array $attributes = [])`: a new instance, for a source that belongs to no model
 - `setExternalId(?string $id)`: name the resource before anything is stored, which is the identity of a source with no model
 - `attachTo(Model $model)`: give the stored row the model it belongs to, re-keyed to the model's name for it
 - `persist(?OriginStatus $status)`: write the record for this source

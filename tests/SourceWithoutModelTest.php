@@ -16,7 +16,7 @@ class SourceWithoutModelTest extends TestCase
 
     public function test_an_external_id_is_enough_identity_to_store_a_source(): void
     {
-        (new WeatherSource())->setExternalId('beat-42')->fetch();
+        WeatherSource::make()->setExternalId('beat-42')->fetch();
 
         $record = SourceRecord::firstOrFail();
 

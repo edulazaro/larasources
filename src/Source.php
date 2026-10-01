@@ -155,6 +155,18 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
         $this->fill($attributes);
     }
 
+    /**
+     * A new instance, for a source that belongs to no model.
+     *
+     * `make()` and not `create()` on purpose: a source can persist, so
+     * `create()` would read as writing the row, and in Laravel `make()` is
+     * already the one that stays in memory.
+     */
+    public static function make(array $attributes = []): static
+    {
+        return new static($attributes);
+    }
+
     protected function arguments(): array
     {
         return [];
