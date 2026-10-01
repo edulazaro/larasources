@@ -23,6 +23,11 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
 {
     protected bool $fetched = false;
 
+    /**
+     * Whether the stored record has been looked up for this instance.
+     */
+    protected bool $recordResolved = false;
+
 
     /**
      * Link to the parent Laravel model (e.g. Article, Property, etc.).
@@ -254,6 +259,7 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     public function setRecord(SourceRecord $record): static
     {
         $this->record = $record;
+        $this->recordResolved = true;
 
         // Only adopt the record's model when the source has none: replacing it
         // would swap the caller's instance for a freshly loaded one, and load
@@ -264,13 +270,20 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     }
 
     /**
-     * The cached record of this source, if it has one.
+     * The stored record of this source, if there is one.
+     *
+     * Looked up in the table the first time it is asked for, so it answers
+     * "is this stored?" on a source that has not read anything yet. It never
+     * calls the origin.
      */
     public function record(): ?SourceRecord
     {
-        return $this->record;
+        return $this->findRecord();
     }
 
+    /**
+     * Alias of record().
+     */
     /**
      * Alias of record().
      */
@@ -420,7 +433,20 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     
     public function clear(): bool
     {
-        return $this->record?->delete() ?? false;
+        $record = $this->record();
+
+        if (!$record) {
+            return false;
+        }
+
+        $deleted = (bool) $record->delete();
+
+        // The row is gone: a later record() must not hand back the stale object
+        // it was just asked to delete, nor go looking for it again.
+        $this->record = null;
+        $this->recordResolved = true;
+
+        return $deleted;
     }
 
     /**
@@ -475,13 +501,19 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     }
 
     /**
-     * The stored record for this source, without ever calling the origin.
+     * The stored record for this source, looked up once per instance.
+     *
+     * A fresh source has nothing loaded, so answering "is this stored?" means
+     * going to the table. Never to the origin: one query, and the miss is
+     * remembered so a loop does not repeat it.
      */
     protected function findRecord(): ?SourceRecord
     {
-        if ($this->record) {
+        if ($this->recordResolved) {
             return $this->record;
         }
+
+        $this->recordResolved = true;
 
         $sourceable = $this->getSourceable();
 
@@ -489,7 +521,7 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
             return null;
         }
 
-        return SourceRecord::where('sourceable_type', $sourceable->getMorphClass())
+        return $this->record = SourceRecord::where('sourceable_type', $sourceable->getMorphClass())
             ->where('sourceable_id', $sourceable->getKey())
             ->where('name', $this->name())
             ->where('variant', $this->variant)

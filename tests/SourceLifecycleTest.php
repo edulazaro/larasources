@@ -51,6 +51,46 @@ class SourceLifecycleTest extends TestCase
         $this->assertFalse($this->city()->source('weather')->clear());
     }
 
+    public function test_the_record_is_found_by_a_source_that_has_not_read_anything(): void
+    {
+        $city = $this->city();
+        $city->source('weather')->save();
+
+        $record = $city->source('weather')->record();
+
+        $this->assertNotNull($record);
+        $this->assertEquals(['temperature' => 18.0], $record->attributes);
+        $this->assertSame(0, FakeWeatherOrigin::$fetchCalls);
+    }
+
+    public function test_asking_for_a_record_that_does_not_exist_never_calls_the_origin(): void
+    {
+        $this->assertNull($this->city()->source('weather')->record());
+        $this->assertSame(0, FakeWeatherOrigin::$fetchCalls);
+    }
+
+    public function test_a_fresh_source_can_clear_the_stored_record(): void
+    {
+        $city = $this->city();
+        $city->source('weather')->save();
+
+        $source = $city->source('weather');
+
+        $this->assertTrue($source->clear());
+        $this->assertSame(0, SourceRecord::count());
+        $this->assertNull($source->record());
+    }
+
+    public function test_deleting_from_a_fresh_source_removes_the_row_too(): void
+    {
+        $city = $this->city();
+        $city->source('weather')->save();
+
+        $this->assertTrue($city->source('weather')->delete());
+        $this->assertTrue(FakeWeatherOrigin::$deleted);
+        $this->assertSame(0, SourceRecord::count());
+    }
+
     public function test_deleting_removes_it_from_the_origin_and_from_the_cache(): void
     {
         $city = $this->city();

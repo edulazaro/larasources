@@ -257,9 +257,9 @@ result through to the record**, so the cache is never left behind after a live r
 source with no model attached has nothing to cache, and `fetch()` just fills the instance.
 
 ```php
-// Has it ever been fetched/saved?
+// Has it ever been fetched/saved? One query, looked up once per instance
 if ($source->record()) {
-    // Data is cached locally
+    // It is stored locally
 }
 
 // What the origin says right now, cached on the way out
@@ -386,7 +386,7 @@ $weather = $city->source('weather');
 - `delete()`: delete remote and clear cache
 - `clear()`: clear cached record only
 - `origin()`: get the resolved Origin instance
-- `record()`, `getRecord()`: get the underlying `SourceRecord` (or `null`)
+- `record()`, `getRecord()`: the stored `SourceRecord`, or `null`. Looked up in the table the first time it is asked for, never from the origin
 - `setVariant(string $variant)`: set the source's variant
 - `setVariantArguments(array $args)`: pass runtime arguments
 - `config(?string $key, mixed $default)`: this source's settings, under `larasources.sources.{name}`
