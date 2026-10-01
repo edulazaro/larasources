@@ -107,6 +107,34 @@ class SourceCacheTest extends TestCase
         $this->assertEquals(['temperature' => 21.5], $this->record($city)->attributes);
     }
 
+    public function test_an_origin_that_cannot_answer_a_first_read_stores_nothing(): void
+    {
+        $city = $this->city();
+
+        FakeWeatherOrigin::$fetchException = new \EduLazaro\Larasources\Exceptions\OriginException('down');
+
+        // The local build is what the caller sees, in memory only.
+        $this->assertSame(18.0, $city->source('weather')->temperature);
+        $this->assertSame(0, SourceRecord::count());
+
+        // And the next read goes back to the origin instead of trusting a row.
+        FakeWeatherOrigin::$fetchException = null;
+
+        $this->assertSame(21.5, $city->source('weather')->temperature);
+        $this->assertSame(1, SourceRecord::count());
+    }
+
+    public function test_a_bug_in_the_origin_is_not_dressed_up_as_a_service_being_down(): void
+    {
+        $city = $this->city();
+
+        FakeWeatherOrigin::$fetchException = new \TypeError('the origin is broken');
+
+        $this->expectException(\TypeError::class);
+
+        $city->source('weather')->temperature;
+    }
+
     public function test_the_cached_record_keeps_the_model_the_source_was_built_from(): void
     {
         $city = $this->city();

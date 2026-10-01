@@ -1337,11 +1337,16 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
 
         try {
             $this->fetch();
-        } catch (\Throwable $e) {
+        } catch (OriginException $e) {
+            // The origin could not answer and there is nothing stored. Build
+            // what we can in memory so the caller sees something, and leave the
+            // table alone: a row written here would say the origin has data it
+            // has never seen, every later read would trust it, and nothing
+            // would ever go back to ask.
+            //
+            // Only the origin's own failure is caught. Anything else is a bug,
+            // and dressing a TypeError up as a service being down hides it.
             $this->build();
-            if (!empty($this->attributes)) {
-                $this->persist();
-            }
         }
     }
 

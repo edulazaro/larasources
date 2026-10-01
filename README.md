@@ -252,7 +252,11 @@ Sources are cached automatically in the `sources` table (the `SourceRecord` mode
 record is keyed by `(sourceable, name, variant)`.
 
 Reading an attribute autoloads: it fills from the cached record when there is one, and goes
-to the origin when there is not. `fetch()` always goes to the origin and **writes the
+to the origin when there is not. When the origin cannot answer that first read, the source
+falls back to `build()` in memory and **nothing is stored**: a record written there would
+say the origin has data it has never seen, and every later read would trust it. The next
+read goes back to the origin. Only `OriginException` is caught, so a bug in an origin
+surfaces instead of looking like a service being down. `fetch()` always goes to the origin and **writes the
 result through to the record**, so the cache is never left behind after a live read. A
 source with no model attached has nothing to cache, and `fetch()` just fills the instance.
 
