@@ -50,7 +50,7 @@ abstract class AgentOrigin extends Origin
 
     protected function callAnthropic(string $prompt): string
     {
-        $apiKey = $this->getConfig('api_key') ?? config('services.anthropic.key');
+        $apiKey = $this->config('api_key') ?? config('services.anthropic.key');
 
         if (!$apiKey) {
             throw new OriginException('Anthropic API key is required');
@@ -82,7 +82,7 @@ abstract class AgentOrigin extends Origin
 
     protected function callOpenAI(string $prompt): string
     {
-        $apiKey = $this->getConfig('api_key') ?? config('services.openai.key');
+        $apiKey = $this->config('api_key') ?? config('services.openai.key');
 
         if (!$apiKey) {
             throw new OriginException('OpenAI API key is required');

@@ -4,6 +4,7 @@ namespace EduLazaro\Larasources;
 
 use ArrayAccess;
 use JsonSerializable;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Str;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Contracts\Support\Jsonable;
@@ -155,17 +156,62 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
         return $this;
     }
 
+    /**
+     * Resolve the argument map into actual values.
+     *
+     * The map declares which attribute of the sourceable feeds each argument,
+     * as in `['city_id' => 'external_id']`, and the resolved array carries the
+     * value of `$city->external_id`. Precedence, from lowest to highest: the
+     * `$arguments` property, the `arguments()` method, the stored record and
+     * the runtime arguments passed to `source()`.
+     */
+    /**
+     * This source's name: the key it is mapped under on the model, falling back
+     * to the class basename. It identifies the cached record and the config
+     * block, so changing it orphans existing records.
+     */
+    public function name(): string
+    {
+        $sources = $this->sourceable && method_exists($this->sourceable, 'getSources')
+            ? $this->sourceable->getSources()
+            : [];
+
+        return array_search(static::class, $sources) ?: class_basename(static::class);
+    }
+
+    /**
+     * This source's settings.
+     *
+     * Same idea as the origin's `config()`, under `larasources.sources.{name}`:
+     * the caller only names the key. Override it when the settings are not
+     * static, or to serve them from the origin's integration.
+     */
+    public function config(?string $key = null, mixed $default = null): mixed
+    {
+        $configKey = 'larasources.sources.' . $this->name();
+
+        if ($key) {
+            $configKey .= '.' . $key;
+        }
+
+        return Config::get($configKey, $default);
+    }
+
     public function resolveArguments(): array
     {
-        $resolvedArguments = $this->arguments();
-       
-        foreach ($this->arguments as $argumentName => $sourceableAttributeName) {
-            if (! $this->sourceable) continue;
-    
-            $resolvedArguments[$argumentName] = data_get($this->sourceable, $sourceableAttributeName);
+        $argumentMap = array_merge($this->arguments, $this->arguments());
+
+        $resolvedArguments = [];
+
+        foreach ($argumentMap as $argumentName => $sourceableAttributeName) {
+            $resolvedArguments[$argumentName] = $this->sourceable
+                ? data_get($this->sourceable, $sourceableAttributeName)
+                : null;
         }
-    
-        $resolvedArguments = $this->record ? array_merge($resolvedArguments, $this->record->arguments) : $resolvedArguments;
+
+        if ($this->record) {
+            $resolvedArguments = array_merge($resolvedArguments, $this->record->arguments);
+        }
 
         return empty($this->variantArguments) ? $resolvedArguments : array_merge($resolvedArguments, $this->variantArguments);
     }
@@ -205,7 +251,12 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     public function setRecord(SourceRecord $record): static
     {
         $this->record = $record;
-        $this->sourceable = $record->sourceable;
+
+        // Only adopt the record's model when the source has none: replacing it
+        // would swap the caller's instance for a freshly loaded one, and load
+        // the morph relation for nothing.
+        $this->sourceable ??= $record->sourceable;
+
         return $this;
     }
 
@@ -257,8 +308,7 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
             return $this;
         }
 
-        $sources = method_exists($sourceable, 'getSources') ? $sourceable->getSources() : [];
-        $name = array_search(static::class, $sources) ?: class_basename(static::class);
+        $name = $this->name();
 
         $record = SourceRecord::updateOrCreate(
             [
@@ -292,14 +342,21 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     }
 
     /**
-     * Fetch fresh data from the origin.
+     * Fetch fresh data from the origin and write it through to the cache.
+     *
+     * Reading from the origin always refreshes the `sources` record: the cache
+     * is the local picture of the origin, so leaving it behind after a live
+     * read would be lying. When the source is not attached to a model there is
+     * nothing to persist and `persist()` returns early.
      */
     public function fetch(): static
     {
         $data = $this->origin()->fetch($this->resolveArguments());
         $this->fetched = true;
-    
-        return $this->fill($data);
+
+        $this->fill($data);
+
+        return $this->persist();
     }
 
     /**
@@ -1101,8 +1158,7 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
         $this->fetched = true;
 
         if ($this->sourceable && method_exists($this->sourceable, 'getKey')) {
-            $sources = method_exists($this->sourceable, 'getSources') ? $this->sourceable->getSources() : [];
-            $name = array_search(static::class, $sources) ?: class_basename(static::class);
+            $name = $this->name();
 
             $morphType = $this->sourceable->getMorphClass();
 
@@ -1121,7 +1177,6 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
 
         try {
             $this->fetch();
-            $this->persist();
         } catch (\Throwable $e) {
             $this->build();
             if (!empty($this->attributes)) {

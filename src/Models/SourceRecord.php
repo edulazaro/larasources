@@ -26,7 +26,9 @@ class SourceRecord extends Model
 
     public function sourceArguments()
     {
-        return $this->hasMany(SourceArgument::class);
+        // The foreign key is `source_id`, not the `source_record_id` Eloquent
+        // would infer from the model name.
+        return $this->hasMany(SourceArgument::class, 'source_id');
     }
 
     public function getArgumentsAttribute(): array

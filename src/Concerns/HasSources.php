@@ -19,17 +19,37 @@ trait HasSources
     protected array $mockedSources = [];
 
     /**
+     * Declare the source mapping.
+     *
+     * Use this instead of the `$sources` property when the mapping is static:
+     * PHP rejects redeclaring a trait property with a different default, so a
+     * model that writes `protected array $sources = [...]` fails to compose and
+     * has to fill the property in its constructor.
+     *
+     * @return array<string, class-string<Source>>
+     */
+    protected function sources(): array
+    {
+        return [];
+    }
+
+    /**
+     * The effective source mapping: the property first, the method on top.
+     *
+     * @return array<string, class-string<Source>>
+     */
+    public function getSources(): array
+    {
+        return array_merge($this->sources, $this->sources());
+    }
+
+    /**
      * Mock an source instance for a specific source class.
      *
      * @param string $sourceKey The fully qualified class name of the source.
      * @param mixed $mockSource The mocked source instance.
      * @return $this
      */
-    public function getSources(): array
-    {
-        return $this->sources;
-    }
-
     public function mockSource(string $sourceKey, Source $mockedSource): static
     {
         $this->mockedSources[$sourceKey] = $mockedSource;
@@ -57,11 +77,13 @@ trait HasSources
 
         // We resolve the alias mapping
         if (!class_exists($source)) {
-            if (!isset($this->sources[$source])) {
+            $sources = $this->getSources();
+
+            if (!isset($sources[$source])) {
                 throw new InvalidArgumentException("Source `{$source}` is not defined in the model's sources array.");
             }
 
-            $source = $this->sources[$source];
+            $source = $sources[$source];
         }
 
         if (App::runningUnitTests() && isset($this->mockedSources[$source])) {

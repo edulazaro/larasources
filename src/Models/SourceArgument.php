@@ -17,17 +17,21 @@ class SourceArgument extends Model
         'argumentable_id',
     ];
 
-    protected $casts = [
-        'value' => 'array', // importante si vas a guardar estructuras o referencias
-    ];
-
     public function source(): BelongsTo
     {
         return $this->belongsTo(SourceRecord::class);
     }
 
-    public function argument(): MorphTo
+    public function argumentable(): MorphTo
     {
         return $this->morphTo('argumentable');
+    }
+
+    /**
+     * @deprecated Use argumentable(), which is what `$argument->argumentable` resolves.
+     */
+    public function argument(): MorphTo
+    {
+        return $this->argumentable();
     }
 }

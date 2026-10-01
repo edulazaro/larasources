@@ -14,6 +14,7 @@ return new class extends Migration {
             $table->morphs('sourceable');
             $table->string('name');
             $table->string('origin')->nullable();
+            $table->string('signature')->nullable();
             $table->json('arguments')->nullable();
             $table->string('variant')->nullable();
             $table->json('attributes');

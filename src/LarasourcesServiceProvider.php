@@ -21,11 +21,6 @@ class LarasourcesServiceProvider extends ServiceProvider
             'source_argument' => SourceArgument::class,
         ]);
 
-        // Publish configuration
-        $this->publishes([
-            __DIR__.'/../config/larasources.php' => config_path('larasources.php'),
-        ], 'larasources-config');
-
         // Publish migrations
         $this->publishes([
             __DIR__.'/database/migrations/' => database_path('migrations'),
@@ -42,7 +37,7 @@ class LarasourcesServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        // Merge configuration
-        $this->mergeConfigFrom(__DIR__.'/../config/larasources.php', 'larasources');
+        // The package ships no configuration: whatever an origin needs is the
+        // integration's own, resolved by its `config()`.
     }
 }

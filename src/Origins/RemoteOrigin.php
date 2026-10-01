@@ -74,9 +74,9 @@ abstract class RemoteOrigin extends Origin
         $request = $this->http()->withHeaders($this->defaultHeaders);
 
         return match ($this->authType) {
-            'bearer' => $request->withToken($this->getConfig('api_token')),
-            'basic' => $request->withBasicAuth($this->getConfig('username'), $this->getConfig('password')),
-            'key' => $request->withHeaders([$this->authHeader => $this->getConfig('api_key')]),
+            'bearer' => $request->withToken($this->config('api_token')),
+            'basic' => $request->withBasicAuth($this->config('username'), $this->config('password')),
+            'key' => $request->withHeaders([$this->authHeader => $this->config('api_key')]),
             default => $request,
         };
     }

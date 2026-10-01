@@ -5,3 +5,4 @@
 /phpunit.xml.dist export-ignore
 /CLAUDE.md export-ignore
 /.github export-ignore
+art/ export-ignore
