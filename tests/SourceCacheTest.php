@@ -39,7 +39,7 @@ class SourceCacheTest extends TestCase
         $this->assertNotNull($record);
         $this->assertEquals(['temperature' => 21.5], $record->attributes);
         $this->assertSame(md5(json_encode(['temperature' => 21.5])), $record->signature);
-        $this->assertSame($record->getKey(), $source->getRecord()->getKey());
+        $this->assertSame($record->getKey(), $source->record()->getKey());
     }
 
     public function test_fetching_again_refreshes_the_cached_result(): void
@@ -78,7 +78,7 @@ class SourceCacheTest extends TestCase
         $source = (new WeatherSource())->fetch();
 
         $this->assertSame(21.5, $source->temperature);
-        $this->assertNull($source->getRecord());
+        $this->assertNull($source->record());
         $this->assertSame(0, SourceRecord::count());
     }
 

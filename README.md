@@ -250,7 +250,7 @@ source with no model attached has nothing to cache, and `fetch()` just fills the
 
 ```php
 // Has it ever been fetched/saved?
-if ($source->getRecord()) {
+if ($source->record()) {
     // Data is cached locally
 }
 
@@ -258,7 +258,7 @@ if ($source->getRecord()) {
 $source->fetch();
 
 // Compare the cached picture with the origin
-$cached = $source->getRecord()?->attributes ?? [];
+$cached = $source->record()?->attributes ?? [];
 $live = $source->fetch()->toArray();
 
 // Clear the cache for this source
@@ -302,7 +302,7 @@ $weather = $city->source('weather');
 - `delete()`: delete remote and clear cache
 - `clear()`: clear cached record only
 - `origin()`: get the resolved Origin instance
-- `getRecord()`: get the underlying `SourceRecord` (or `null`)
+- `record()`, `getRecord()`: get the underlying `SourceRecord` (or `null`)
 - `setVariant(string $variant)`: set the source's variant
 - `setVariantArguments(array $args)`: pass runtime arguments
 - `config(?string $key, mixed $default)`: this source's settings, under `larasources.sources.{name}`

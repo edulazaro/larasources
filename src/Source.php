@@ -260,9 +260,20 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
         return $this;
     }
 
-    public function getRecord(): ?SourceRecord
+    /**
+     * The cached record of this source, if it has one.
+     */
+    public function record(): ?SourceRecord
     {
         return $this->record;
+    }
+
+    /**
+     * Alias of record().
+     */
+    public function getRecord(): ?SourceRecord
+    {
+        return $this->record();
     }
 
 
