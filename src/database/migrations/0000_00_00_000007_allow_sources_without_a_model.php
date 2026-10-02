@@ -10,8 +10,6 @@ use Illuminate\Support\Facades\Schema;
  * A source is identified by its model or, when there is none yet, by the id the
  * service gave the resource. That is the flow where a payload is fetched first
  * and the model is derived from it, and then attached with `attachTo()`.
- *
- * Changing a column to nullable needs Laravel 11 or doctrine/dbal on 9 and 10.
  */
 return new class extends Migration {
     public function up(): void
