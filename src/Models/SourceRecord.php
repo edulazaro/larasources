@@ -98,7 +98,11 @@ class SourceRecord extends Model
             $value = $argument->argumentable;
 
             if ($value instanceof SourceRecord) {
-                $arguments[$argument->name] = $value->attributes ?? [];
+                // `getAttribute()` and not `->attributes`: Eloquent's attribute
+                // bag is a protected property, and from inside this class PHP
+                // reads it directly instead of going through the cast, which
+                // hands over the whole row rather than the payload.
+                $arguments[$argument->name] = $value->getAttribute('attributes') ?? [];
             } else {
                 $arguments[$argument->name] = $value;
             }

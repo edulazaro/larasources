@@ -224,7 +224,27 @@ class MyProviderOrigin extends Origin
 }
 ```
 
-### 5. Variants and arguments
+### 5. Arguments that point at something else
+
+An argument can point at a model, or at another source, instead of carrying a value:
+
+```php
+$scraped = $article->source('scraped')->fetch();
+
+$article->source('translation')
+    ->useArgument('scraped', $scraped)   // a model, a source, or its record
+    ->fetch();                           // the origin receives the scraped payload
+```
+
+It is a pointer, not a copy: the origin reads that source's payload as it is when it reads
+it, so a pipeline where one source is built out of another never carries a stale copy from
+one row to the next. The payload arrives uncast, because casts belong to the source that
+owns those fields.
+
+The pointer is stored, so it is still there on a later read, and `forgetArgument('scraped')`
+removes it. A name points at one thing only.
+
+### 6. Variants and arguments
 
 Use variants to handle multiple modes per source (for example, `sale` vs `rent` for a property listing, or `current` vs `forecast` for weather):
 
@@ -501,6 +521,8 @@ $weather = $city->source('weather');
 - `record()`, `getRecord()`: the stored `SourceRecord`, or `null`. Looked up in the table the first time it is asked for, never from the origin
 - `setVariant(string $variant)`: set the source's variant
 - `setVariantArguments(array $args)`: pass runtime arguments
+- `useArgument(string $name, Model|SourceRecord|Source $value)`: point an argument at a model or at another source, as a live pointer
+- `forgetArgument(string $name)`: stop pointing it anywhere
 - `config(?string $key, mixed $default)`: this source's settings, under `larasources.sources.{name}`
 - `name()`: the key this source is mapped under on the model
 

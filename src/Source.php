@@ -10,6 +10,7 @@ use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Contracts\Support\Jsonable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use EduLazaro\Larasources\Models\SourceArgument;
 use EduLazaro\Larasources\Models\SourceRecord;
 use Illuminate\Database\Eloquent\Model;
 use EduLazaro\Larasources\Enums\OriginStatus;
@@ -28,6 +29,14 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
      * Whether the stored record has been looked up for this instance.
      */
     protected bool $recordResolved = false;
+
+    /**
+     * Arguments that point at a model or at another source's record.
+     *
+     * Kept here until there is a row to hang them from, so an argument can be
+     * declared before the first read, which is when the origin needs it.
+     */
+    protected array $relatedArguments = [];
 
     /**
      * What this source calls itself when no model is naming it.
@@ -244,6 +253,47 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
      * `$arguments` property, the `arguments()` method, the stored record and
      * the runtime arguments passed to `source()`.
      */
+    /**
+     * Point an argument at a model, or at another source.
+     *
+     * The argument is a live pointer, not a copy: pointing at another source
+     * hands this one that source's whole payload, read when it is read. That is
+     * what composes a pipeline, where one source is built out of another, and
+     * nothing has to be copied from one row to the next.
+     */
+    public function useArgument(string $name, Model|SourceRecord|Source $value): static
+    {
+        $target = $value instanceof Source ? $value->record() : $value;
+
+        if (!$target) {
+            throw new RuntimeException(
+                "The source given as argument `{$name}` has no record yet: store it before pointing at it."
+            );
+        }
+
+        $this->relatedArguments[$name] = $target;
+
+        return $this;
+    }
+
+    /**
+     * Stop pointing that argument anywhere.
+     */
+    public function forgetArgument(string $name): static
+    {
+        unset($this->relatedArguments[$name]);
+
+        if ($record = $this->record()) {
+            SourceArgument::where('source_id', $record->getKey())
+                ->where('name', $name)
+                ->delete();
+
+            $record->unsetRelation('sourceArguments');
+        }
+
+        return $this;
+    }
+
     public function resolveArguments(): array
     {
         $argumentMap = array_merge($this->arguments, $this->arguments());
@@ -258,6 +308,14 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
 
         if ($record = $this->record()) {
             $resolvedArguments = array_merge($resolvedArguments, $record->arguments);
+        }
+
+        // Declared in this instance, so they win over the stored ones and are
+        // already there on the first read, before any row exists.
+        foreach ($this->relatedArguments as $name => $target) {
+            $resolvedArguments[$name] = $target instanceof SourceRecord
+                ? ($target->getAttribute('attributes') ?? [])
+                : $target;
         }
 
         return empty($this->variantArguments) ? $resolvedArguments : array_merge($resolvedArguments, $this->variantArguments);
@@ -495,6 +553,8 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
 
         $record = SourceRecord::updateOrCreate($key, $values);
 
+        $this->persistRelatedArguments($record);
+
         return $this->setRecord($record);
     }
 
@@ -583,6 +643,31 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
         }
 
         return $this->fetch();
+    }
+
+    /**
+     * Write the arguments declared on this instance as rows of their own.
+     */
+    protected function persistRelatedArguments(SourceRecord $record): void
+    {
+        if (!$this->relatedArguments) {
+            return;
+        }
+
+        foreach ($this->relatedArguments as $name => $target) {
+            SourceArgument::updateOrCreate(
+                [
+                    'source_id' => $record->getKey(),
+                    'name' => $name,
+                ],
+                [
+                    'argumentable_type' => $target->getMorphClass(),
+                    'argumentable_id' => $target->getKey(),
+                ]
+            );
+        }
+
+        $record->unsetRelation('sourceArguments');
     }
 
     /**
