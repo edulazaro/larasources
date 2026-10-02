@@ -128,8 +128,6 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
      */
     protected $casts = [];
 
-    protected array $relations = [];
-
     protected $origin;
 
     /**
@@ -848,23 +846,6 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
     }
 
     /**
-     * Create a collection of models from plain arrays.
-     *
-     * @param  array  $items
-     * @return array
-     */
-    public static function hydrate(array $items)
-    {
-        $instance = new static;
-
-        $items = array_map(function ($item) use ($instance) {
-            return $instance->newInstance($item);
-        }, $items);
-
-        return $items;
-    }
-
-    /**
      * Get the hidden attributes for the model.
      *
      * @return array
@@ -1570,7 +1551,7 @@ abstract class Source implements ArrayAccess, Arrayable, Jsonable, JsonSerializa
      */
     public function __isset($key)
     {
-        return (isset($this->attributes[$key]) || isset($this->relations[$key])) ||
+        return isset($this->attributes[$key]) ||
             ($this->hasGetMutator($key) && ! is_null($this->getAttributeValue($key)));
     }
 
