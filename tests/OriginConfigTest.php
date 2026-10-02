@@ -9,6 +9,29 @@ use Illuminate\Support\Facades\Http;
 
 class OriginConfigTest extends TestCase
 {
+    public function test_an_origin_still_built_around_get_config_says_so(): void
+    {
+        $this->expectException(\EduLazaro\Larasources\Exceptions\OriginException::class);
+        $this->expectExceptionMessage('Rename it to config()');
+
+        new class (new \EduLazaro\Larasources\Tests\Fixtures\WeatherSource()) extends \EduLazaro\Larasources\Origins\Origin {
+            public static function getAlias(): string
+            {
+                return 'legacy';
+            }
+
+            public function fetch(array $arguments = []): array
+            {
+                return [];
+            }
+
+            protected function getConfig(?string $key = null, mixed $default = null): mixed
+            {
+                return 'from the database';
+            }
+        };
+    }
+
     protected function origin(): HttpWeatherOrigin
     {
         return new HttpWeatherOrigin(new WeatherSource());
@@ -64,13 +87,6 @@ class OriginConfigTest extends TestCase
         $this->assertSame(['temperature' => 21.5], $this->origin()->fetch());
 
         Http::assertSentCount(3);
-    }
-
-    public function test_the_deprecated_getConfig_still_resolves(): void
-    {
-        config(['larasources.origins.http_weather.api_key' => 'secret-key']);
-
-        $this->assertSame('secret-key', $this->invokeMethod($this->origin(), 'getConfig', 'api_key'));
     }
 
     public function test_a_source_reads_its_own_config_block(): void

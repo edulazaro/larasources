@@ -18,6 +18,27 @@ abstract class Origin
     public function __construct(Source $source)
     {
         $this->source = $source;
+
+        $this->refuseRenamedSettingsReader();
+    }
+
+    /**
+     * Fail loudly for an origin still built around `getConfig()`.
+     *
+     * It used to be the name of the settings reader, and an origin that serves
+     * its credentials from the database overrode it. The package calls
+     * `config()`, so that override would simply never run and the credentials
+     * would come back empty, with nothing to see in a log.
+     */
+    private function refuseRenamedSettingsReader(): void
+    {
+        if (!method_exists($this, 'getConfig')) {
+            return;
+        }
+
+        throw new OriginException(
+            static::class . ' overrides getConfig(), which is no longer read. Rename it to config().'
+        );
     }
 
     public function getSource(): Source
@@ -90,15 +111,6 @@ abstract class Origin
         }
 
         return Config::get($configKey, $default);
-    }
-
-    /**
-     * @deprecated Use config(). Overriding this no longer changes what the
-     *             origin reads: the package calls config().
-     */
-    protected function getConfig(?string $key = null, mixed $default = null): mixed
-    {
-        return $this->config($key, $default);
     }
 
     abstract public static function getAlias(): string;

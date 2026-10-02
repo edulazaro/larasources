@@ -23,6 +23,6 @@ class HttpWeatherOrigin extends Origin
     /** The timeout the client was built with. */
     public function resolvedTimeout(): int
     {
-        return (int) ($this->getConfig('timeout') ?? $this->timeout);
+        return (int) ($this->config('timeout') ?? $this->timeout);
     }
 }

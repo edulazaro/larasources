@@ -26,12 +26,4 @@ class SourceArgument extends Model
     {
         return $this->morphTo('argumentable');
     }
-
-    /**
-     * @deprecated Use argumentable(), which is what `$argument->argumentable` resolves.
-     */
-    public function argument(): MorphTo
-    {
-        return $this->argumentable();
-    }
 }
