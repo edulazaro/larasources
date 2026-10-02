@@ -19,7 +19,7 @@ return new class extends Migration {
                
             $table->timestamps();
         
-            $table->unique(['source_id', 'name'], 'src_args_unique');
+            $table->unique(['source_id', 'name']);
         });
     }
 

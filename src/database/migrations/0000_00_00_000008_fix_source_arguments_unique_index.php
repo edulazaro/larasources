@@ -13,7 +13,9 @@ use Illuminate\Support\Facades\Schema;
  * came last. A name is a key: `(source_id, name)` is the invariant.
  */
 return new class extends Migration {
-    private const INDEX = 'src_args_unique';
+    private const STALE = 'src_args_unique';
+
+    private const WANTED = 'source_arguments_source_id_name_unique';
 
     public function up(): void
     {
@@ -21,28 +23,44 @@ return new class extends Migration {
             return;
         }
 
-        if ($this->hasIndex(self::INDEX)) {
+        if (!$this->hasIndex(self::WANTED)) {
+            $this->pruneArgumentsPointingElsewhere();
+
+            // Created before the old one is dropped on purpose: InnoDB uses the
+            // old unique as the index behind the `source_id` foreign key and
+            // refuses to drop the only index that can serve it. This one starts
+            // with `source_id` too, so it can take over.
             Schema::table('source_arguments', function (Blueprint $table) {
-                $table->dropUnique(self::INDEX);
+                $table->unique(['source_id', 'name'], self::WANTED);
             });
         }
 
-        $this->pruneArgumentsPointingElsewhere();
-
-        Schema::table('source_arguments', function (Blueprint $table) {
-            $table->unique(['source_id', 'name'], self::INDEX);
-        });
+        $this->dropIndexIfPresent(self::STALE);
     }
 
     public function down(): void
     {
-        if (!Schema::hasTable('source_arguments') || !$this->hasIndex(self::INDEX)) {
+        if (!Schema::hasTable('source_arguments') || !$this->hasIndex(self::WANTED)) {
             return;
         }
 
-        Schema::table('source_arguments', function (Blueprint $table) {
-            $table->dropUnique(self::INDEX);
-            $table->unique(['source_id', 'argumentable_type', 'argumentable_id', 'name'], self::INDEX);
+        if (!$this->hasIndex(self::STALE)) {
+            Schema::table('source_arguments', function (Blueprint $table) {
+                $table->unique(['source_id', 'argumentable_type', 'argumentable_id', 'name'], self::STALE);
+            });
+        }
+
+        $this->dropIndexIfPresent(self::WANTED);
+    }
+
+    private function dropIndexIfPresent(string $index): void
+    {
+        if (!$this->hasIndex($index)) {
+            return;
+        }
+
+        Schema::table('source_arguments', function (Blueprint $table) use ($index) {
+            $table->dropUnique($index);
         });
     }
 
